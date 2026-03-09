@@ -276,24 +276,52 @@
           Whether you're a customer, partner, retailer, or just curious about what we do — reach out.
           We believe in open communication and we'll get back to you promptly.
         </p>
-        <div class="contact-grid">
-          <article class="card">
-            <h3>United States</h3>
-            <p>Essential Layer Inc.</p>
-            <p>San Francisco, California</p>
-            <p><a href="mailto:info@essentiallayer.com">info@essentiallayer.com</a></p>
-          </article>
-          <article class="card">
-            <h3>Philippines</h3>
-            <p>Essential Layer Manufacturing</p>
-            <p>PEZA Zone, Carmona, Cavite</p>
-            <p><a href="mailto:info@essentiallayer.com">info@essentiallayer.com</a></p>
-          </article>
-          <article class="card">
-            <h3>Cottonique Shop</h3>
-            <p>For product inquiries, orders, and support:</p>
-            <p><a href="https://www.cottonique.com" target="_blank" rel="noopener noreferrer">www.cottonique.com</a></p>
-          </article>
+        <div class="contact-layout">
+          <form id="contact-form" class="contact-form" novalidate>
+            <div class="form-group">
+              <label for="contact-name">Name</label>
+              <input type="text" id="contact-name" name="name" required maxlength="200" autocomplete="name" />
+            </div>
+            <div class="form-group">
+              <label for="contact-email">Email</label>
+              <input type="email" id="contact-email" name="email" required maxlength="320" autocomplete="email" />
+            </div>
+            <div class="form-group">
+              <label for="contact-subject">Subject</label>
+              <select id="contact-subject" name="subject">
+                <option value="general">General Inquiry</option>
+                <option value="partnership">Partnership / Retail</option>
+                <option value="product">Product Question</option>
+                <option value="traceability">Supply Chain / Traceability</option>
+                <option value="media">Media / Press</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="contact-message">Message</label>
+              <textarea id="contact-message" name="message" rows="5" required maxlength="5000"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" id="contact-submit">Send Message</button>
+            <div id="form-status" class="form-status" aria-live="polite"></div>
+          </form>
+          <div class="contact-info-stack">
+            <article class="card">
+              <h3>United States</h3>
+              <p>Essential Layer Inc.</p>
+              <p>San Francisco, California</p>
+              <p><a href="mailto:info@essentiallayer.com">info@essentiallayer.com</a></p>
+            </article>
+            <article class="card">
+              <h3>Philippines</h3>
+              <p>Essential Layer Manufacturing</p>
+              <p>PEZA Zone, Carmona, Cavite</p>
+              <p><a href="mailto:info@essentiallayer.com">info@essentiallayer.com</a></p>
+            </article>
+            <article class="card">
+              <h3>Cottonique Shop</h3>
+              <p>For product inquiries, orders, and support:</p>
+              <p><a href="https://www.cottonique.com" target="_blank" rel="noopener noreferrer">www.cottonique.com</a></p>
+            </article>
+          </div>
         </div>
       </section>
     </main>
@@ -334,6 +362,11 @@
       </div>
     </footer>
 
+    <!-- Firebase SDK (compat for simplicity — no build tools needed) -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics-compat.js"></script>
+    <script src="firebase-config.js"></script>
     <script src="script.js"></script>
   </body>
 </html>
