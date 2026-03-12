@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cottonique Website Audit Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-2: #232733;
+      --border: #2e3344;
+      --text: #e4e6ed;
+      --text-dim: #8b8fa3;
+      --accent: #6c5ce7;
+      --accent-light: #a29bfe;
+      --urgent: #ff6b6b;
+      --urgent-bg: rgba(255,107,107,0.1);
+      --high: #ffa502;
+      --high-bg: rgba(255,165,2,0.1);
+      --medium: #1dd1a1;
+      --medium-bg: rgba(29,209,161,0.1);
+      --low: #54a0ff;
+      --low-bg: rgba(84,160,255,0.1);
+      --success: #2ed573;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* === PASSWORD SCREEN === */
+    #password-screen {
+      position: fixed; inset: 0; z-index: 1000;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column;
+    }
+    #password-screen.hidden { display: none; }
+    .pw-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px;
+      text-align: center;
+      max-width: 420px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .pw-box .lock-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    .pw-box h2 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .pw-box p {
+      color: var(--text-dim);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .pw-input-wrap {
+      display: flex;
+      gap: 8px;
+    }
+    .pw-input-wrap input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .pw-input-wrap input:focus {
+      border-color: var(--accent);
+    }
+    .pw-input-wrap button {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .pw-input-wrap button:hover {
+      background: var(--accent-light);
+    }
+    .pw-error {
+      color: var(--urgent);
+      font-size: 13px;
+      margin-top: 12px;
+      min-height: 20px;
+    }
+
+    /* === DASHBOARD === */
+    #dashboard { display: none; }
+    #dashboard.visible { display: block; }
+
+    .top-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+    .top-bar .brand {
+      font-weight: 700;
+      font-size: 18px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .top-bar .brand span {
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .progress-summary {
+      display: flex; align-items: center; gap: 16px;
+      font-size: 14px;
+      color: var(--text-dim);
+    }
+    .progress-bar-wrap {
+      width: 200px; height: 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-light));
+      border-radius: 4px;
+      transition: width 0.5s ease;
+      width: 0%;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 48px 0 40px;
+    }
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, var(--text), var(--accent-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      color: var(--text-dim);
+      font-size: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Stats Row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-card .stat-number {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .stat-card .stat-label {
+      font-size: 13px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .stat-card.urgent .stat-number { color: var(--urgent); }
+    .stat-card.high .stat-number { color: var(--high); }
+    .stat-card.medium .stat-number { color: var(--medium); }
+    .stat-card.total .stat-number { color: var(--accent-light); }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 32px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+    .legend-dot.urgent { background: var(--urgent); }
+    .legend-dot.high { background: var(--high); }
+    .legend-dot.medium { background: var(--medium); }
+
+    /* Task Cards */
+    .task-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .task-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .task-card.completed {
+      opacity: 0.5;
+    }
+    .task-card.completed .task-header {
+      text-decoration: line-through;
+      text-decoration-color: var(--text-dim);
+    }
+
+    .task-header-row {
+      display: flex;
+      align-items: center;
+      padding: 20px 24px;
+      gap: 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    /* Custom Checkbox */
+    .checkbox-wrap {
+      position: relative;
+      width: 24px; height: 24px;
+      flex-shrink: 0;
+    }
+    .checkbox-wrap input {
+      position: absolute;
+      opacity: 0;
+      width: 24px; height: 24px;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .checkmark {
+      position: absolute;
+      inset: 0;
+      border-radius: 6px;
+      border: 2px solid var(--border);
+      background: var(--bg);
+      transition: all 0.2s;
+    }
+    .checkbox-wrap input:checked + .checkmark {
+      background: var(--success);
+      border-color: var(--success);
+    }
+    .checkbox-wrap input:checked + .checkmark::after {
+      content: '';
+      position: absolute;
+      left: 7px; top: 3px;
+      width: 6px; height: 11px;
+      border: solid #fff;
+      border-width: 0 2.5px 2.5px 0;
+      transform: rotate(45deg);
+    }
+
+    .task-number {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .task-number.urgent { background: var(--urgent-bg); color: var(--urgent); }
+    .task-number.high { background: var(--high-bg); color: var(--high); }
+    .task-number.medium { background: var(--medium-bg); color: var(--medium); }
+
+    .task-info { flex: 1; min-width: 0; }
+    .task-title {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 2px;
+    }
+    .task-meta {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge.urgent { background: var(--urgent-bg); color: var(--urgent); }
+    .badge.high { background: var(--high-bg); color: var(--high); }
+    .badge.medium { background: var(--medium-bg); color: var(--medium); }
+
+    .timeline-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      background: rgba(108,92,231,0.1);
+      color: var(--accent-light);
+    }
+
+    .expand-icon {
+      font-size: 14px;
+      color: var(--text-dim);
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    .task-card.open .expand-icon {
+      transform: rotate(180deg);
+    }
+
+    .task-details {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .task-card.open .task-details {
+      max-height: 1200px;
+    }
+    .task-details-inner {
+      padding: 0 24px 24px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+    }
+
+    .detail-section {
+      margin-bottom: 20px;
+    }
+    .detail-section:last-child {
+      margin-bottom: 0;
+    }
+    .detail-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--accent-light);
+      margin-bottom: 8px;
+    }
+    .detail-text {
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1.7;
+    }
+    .detail-text code {
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--accent-light);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .detail-text ul {
+      padding-left: 20px;
+      margin-top: 6px;
+    }
+    .detail-text li {
+      margin-bottom: 6px;
+    }
+
+    .example-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 8px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      color: var(--medium);
+      line-height: 1.8;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .steps-list {
+      counter-reset: steps;
+      list-style: none;
+      padding: 0;
+    }
+    .steps-list li {
+      counter-increment: steps;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    .steps-list li::before {
+      content: counter(steps);
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .owner-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      background: rgba(255,255,255,0.05);
+      color: var(--text-dim);
+    }
+
+    /* Footer */
+    .dashboard-footer {
+      text-align: center;
+      padding: 40px 0;
+      color: var(--text-dim);
+      font-size: 13px;
+      border-top: 1px solid var(--border);
+      margin-top: 48px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .hero h1 { font-size: 26px; }
+      .top-bar { padding: 12px 16px; flex-direction: column; gap: 12px; }
+      .container { padding: 20px 16px 60px; }
+      .task-header-row { padding: 16px; }
+      .task-details-inner { padding: 0 16px 16px; padding-top: 16px; }
+      .pw-box { padding: 32px 24px; }
+      .task-meta { flex-wrap: wrap; gap: 8px; }
+      .legend { gap: 12px; }
+      .progress-bar-wrap { width: 140px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- PASSWORD SCREEN -->
+<div id="password-screen">
+  <div class="pw-box">
+    <div class="lock-icon">&#128274;</div>
+    <h2>Cottonique Audit Dashboard</h2>
+    <p>Enter the team password to view the audit action items.</p>
+    <div class="pw-input-wrap">
+      <input type="password" id="pw-input" placeholder="Enter password..." autofocus />
+      <button onclick="checkPassword()">Unlock</button>
+    </div>
+    <div class="pw-error" id="pw-error"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="top-bar">
+    <div class="brand">
+      Cottonique Audit <span>Action Plan</span>
+    </div>
+    <div class="progress-summary">
+      <span id="progress-text">0 of 10 completed</span>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="hero">
+      <h1>Website Optimization Roadmap</h1>
+      <p>10 high-impact improvements for cottonique.com, prioritized by urgency and effort. Check off each item as your team completes it.</p>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="stats-row">
+      <div class="stat-card urgent">
+        <div class="stat-number">3</div>
+        <div class="stat-label">Urgent</div>
+      </div>
+      <div class="stat-card high">
+        <div class="stat-number">3</div>
+        <div class="stat-label">High Priority</div>
+      </div>
+      <div class="stat-card medium">
+        <div class="stat-number">4</div>
+        <div class="stat-label">Medium</div>
+      </div>
+      <div class="stat-card total">
+        <div class="stat-number" id="remaining-count">10</div>
+        <div class="stat-label">Remaining</div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot urgent"></div> Urgent &mdash; Do this week</div>
+      <div class="legend-item"><div class="legend-dot high"></div> High &mdash; Do within 2 weeks</div>
+      <div class="legend-item"><div class="legend-dot medium"></div> Medium &mdash; Do within 30 days</div>
+    </div>
+
+    <!-- TASK 1 -->
+    <div class="task-card" data-task="1">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number urgent">1</div>
+        <div class="task-info">
+          <div class="task-title">Enable the Cart Drawer</div>
+          <div class="task-meta">
+            <span class="badge urgent">Urgent</span>
+            <span class="timeline-badge">~ 5 minutes</span>
+            <span class="owner-tag">Shopify Admin</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">The cart drawer is disabled. When customers click "Add to Cart," they're taken to a separate cart page instead of seeing a slide-out drawer. This adds unnecessary clicks and causes drop-offs.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Step-by-Step Instructions</div>
+            <ol class="steps-list">
+              <li>Log into <strong>Shopify Admin</strong> &rarr; Online Store &rarr; Themes</li>
+              <li>Click <strong>"Customize"</strong> on the live Fame theme</li>
+              <li>Open <strong>Theme Settings</strong> (gear icon, bottom-left)</li>
+              <li>Navigate to <strong>Cart</strong> section</li>
+              <li>Change Cart type from <strong>"Page"</strong> to <strong>"Drawer"</strong></li>
+              <li>Click <strong>Save</strong></li>
+            </ol>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Expected Result</div>
+            <div class="detail-text">A slide-out cart drawer appears when items are added, allowing customers to continue shopping or proceed to checkout without leaving the page.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 2 -->
+    <div class="task-card" data-task="2">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number urgent">2</div>
+        <div class="task-info">
+          <div class="task-title">Add H1 Headings to All Key Pages</div>
+          <div class="task-meta">
+            <span class="badge urgent">Urgent</span>
+            <span class="timeline-badge">~ 30 minutes</span>
+            <span class="owner-tag">Theme Developer</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">The homepage and collection pages are missing <code>&lt;h1&gt;</code> heading tags. Google uses H1 as the primary signal for what a page is about. Missing H1 = weaker SEO rankings.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Step-by-Step Instructions</div>
+            <ol class="steps-list">
+              <li>Go to <strong>Shopify Admin</strong> &rarr; Online Store &rarr; Themes &rarr; <strong>Edit Code</strong></li>
+              <li>Open <code>index.liquid</code> (or the homepage section file)</li>
+              <li>Add an H1 tag near the top of the page content</li>
+              <li>Repeat for each collection template in <code>collection.liquid</code></li>
+            </ol>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Example Code</div>
+            <div class="example-box">&lt;!-- Homepage --&gt;
+&lt;h1 class="visually-hidden"&gt;
+  Hypoallergenic Organic Cotton Clothing for Sensitive Skin
+&lt;/h1&gt;
+
+&lt;!-- Collection Page --&gt;
+&lt;h1&gt;{{ collection.title }}&lt;/h1&gt;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 3 -->
+    <div class="task-card" data-task="3">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number urgent">3</div>
+        <div class="task-info">
+          <div class="task-title">Add Open Graph & Twitter Card Meta Tags</div>
+          <div class="task-meta">
+            <span class="badge urgent">Urgent</span>
+            <span class="timeline-badge">~ 1 hour</span>
+            <span class="owner-tag">Theme Developer</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">When someone shares a Cottonique link on Facebook, Instagram, LinkedIn, or Twitter, it shows as a plain text link with <strong>no image preview and no description</strong>. This kills social engagement and looks unprofessional.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Step-by-Step Instructions</div>
+            <ol class="steps-list">
+              <li>Go to <strong>Edit Code</strong> &rarr; open <code>theme.liquid</code></li>
+              <li>Add the meta tags inside the <code>&lt;head&gt;</code> section</li>
+              <li>Test with <a href="https://developers.facebook.com/tools/debug/" target="_blank" style="color:var(--accent-light)">Facebook Sharing Debugger</a> and <a href="https://cards-dev.twitter.com/validator" target="_blank" style="color:var(--accent-light)">Twitter Card Validator</a></li>
+            </ol>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Example Code (add to theme.liquid &lt;head&gt;)</div>
+            <div class="example-box">&lt;meta property="og:title" content="{{ page_title }}"&gt;
+&lt;meta property="og:description" content="{{ page_description | escape }}"&gt;
+&lt;meta property="og:image" content="{{ page_image | img_url: '1200x630' }}"&gt;
+&lt;meta property="og:url" content="{{ canonical_url }}"&gt;
+&lt;meta property="og:type" content="website"&gt;
+
+&lt;meta name="twitter:card" content="summary_large_image"&gt;
+&lt;meta name="twitter:title" content="{{ page_title }}"&gt;
+&lt;meta name="twitter:description" content="{{ page_description | escape }}"&gt;
+&lt;meta name="twitter:image" content="{{ page_image | img_url: '1200x630' }}"&gt;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 4 -->
+    <div class="task-card" data-task="4">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number high">4</div>
+        <div class="task-info">
+          <div class="task-title">Add Product Schema Markup (JSON-LD)</div>
+          <div class="task-meta">
+            <span class="badge high">High</span>
+            <span class="timeline-badge">~ 2 hours</span>
+            <span class="owner-tag">Theme Developer</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">Product pages lack structured data. This means Google can't show <strong>star ratings, prices, or stock status</strong> in search results. Competitors with rich snippets get significantly higher click-through rates.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Step-by-Step Instructions</div>
+            <ol class="steps-list">
+              <li>Go to <strong>Edit Code</strong> &rarr; find the product template (e.g., <code>product.liquid</code> or <code>main-product.liquid</code>)</li>
+              <li>Add the JSON-LD script block at the bottom of the template</li>
+              <li>Test with <a href="https://search.google.com/test/rich-results" target="_blank" style="color:var(--accent-light)">Google Rich Results Test</a></li>
+            </ol>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Example Code</div>
+            <div class="example-box">&lt;script type="application/ld+json"&gt;
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "{{ product.title | escape }}",
+  "image": "https:{{ product.featured_image | img_url: '1024x' }}",
+  "description": "{{ product.description | strip_html | escape }}",
+  "sku": "{{ product.selected_or_first_available_variant.sku }}",
+  "brand": { "@type": "Brand", "name": "Cottonique" },
+  "offers": {
+    "@type": "Offer",
+    "price": "{{ product.price | money_without_currency }}",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/{% if product.available %}InStock{% else %}OutOfStock{% endif %}"
+  }
+}
+&lt;/script&gt;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 5 -->
+    <div class="task-card" data-task="5">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number high">5</div>
+        <div class="task-info">
+          <div class="task-title">Remove Duplicate & Unused Third-Party Scripts</div>
+          <div class="task-meta">
+            <span class="badge high">High</span>
+            <span class="timeline-badge">~ 2-3 hours</span>
+            <span class="owner-tag">Shopify Admin</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">The site loads <strong>10+ third-party scripts</strong> on every page — including Rebuy Engine loading <strong>twice</strong>. This significantly slows page load and hurts Google Core Web Vitals scores (which affect SEO ranking).</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Scripts Found</div>
+            <div class="detail-text">
+              <ul>
+                <li><strong>Judge.me</strong> — Reviews (keep)</li>
+                <li><strong>Klaviyo</strong> — Email marketing (keep, but defer loading)</li>
+                <li><strong>Rebuy Engine</strong> — Upsells (LOADED TWICE — fix immediately)</li>
+                <li><strong>Globo Filters</strong> — Collection filters (evaluate if needed)</li>
+                <li><strong>Boost Sales / Avada</strong> — Pop-ups (evaluate ROI)</li>
+                <li><strong>hCaptcha</strong> — Bot protection (keep, lazy-load)</li>
+                <li><strong>Various tracking pixels</strong> — Audit which are active</li>
+              </ul>
+            </div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Step-by-Step Instructions</div>
+            <ol class="steps-list">
+              <li>Go to <strong>Shopify Admin</strong> &rarr; Apps &rarr; review all installed apps</li>
+              <li>Remove the <strong>duplicate Rebuy</strong> script (check theme code for hardcoded instances)</li>
+              <li>For each app, decide: <strong>Keep / Defer / Remove</strong></li>
+              <li>Run <a href="https://pagespeed.web.dev" target="_blank" style="color:var(--accent-light)">Google PageSpeed Insights</a> before and after to measure improvement</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 6 -->
+    <div class="task-card" data-task="6">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number high">6</div>
+        <div class="task-info">
+          <div class="task-title">Add Trust Badges Near "Add to Cart"</div>
+          <div class="task-meta">
+            <span class="badge high">High</span>
+            <span class="timeline-badge">~ 1-2 hours</span>
+            <span class="owner-tag">Theme Developer</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">Product pages lack visible trust signals near the purchase button. No payment icons, no security badge, no key selling points. Customers shopping for hypoallergenic products are especially cautious — they need reassurance before buying.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">What to Add (Below "Add to Cart" button)</div>
+            <div class="detail-text">
+              <ul>
+                <li>Payment method icons (Visa, Mastercard, Amex, PayPal)</li>
+                <li>Security badge ("Secure Checkout" with lock icon)</li>
+                <li>Key differentiators in icon format:
+                  <ul>
+                    <li>"100% Organic Cotton"</li>
+                    <li>"Hypoallergenic Certified"</li>
+                    <li>"Free Returns"</li>
+                    <li>"Ships Worldwide"</li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">How to Implement</div>
+            <ol class="steps-list">
+              <li>In Theme Customize, add an <strong>Image with Text</strong> or <strong>Custom Liquid</strong> block below the Add to Cart button in the product template</li>
+              <li>Create a small icon bar with 4 trust badges (use SVG icons for crisp display)</li>
+              <li>Alternatively, install a free trust badge app from the Shopify App Store</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 7 -->
+    <div class="task-card" data-task="7">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number medium">7</div>
+        <div class="task-info">
+          <div class="task-title">Fix Color Contrast for Accessibility</div>
+          <div class="task-meta">
+            <span class="badge medium">Medium</span>
+            <span class="timeline-badge">~ 1 hour</span>
+            <span class="owner-tag">Theme Developer</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">Several text colors fail <strong>WCAG AA</strong> accessibility standards. Gray text (<code>#696969</code>) on white backgrounds has a contrast ratio of only 4.0:1 — the minimum required is 4.5:1. This makes text hard to read for visually impaired users and may create legal risk under ADA compliance.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">What to Change</div>
+            <div class="example-box">/* BEFORE (fails WCAG AA) */
+color: #696969;    /* ratio: 4.0:1 — FAILS */
+color: #45705f;    /* ratio: ~4.2:1 — borderline */
+
+/* AFTER (passes WCAG AA) */
+color: #595959;    /* ratio: 5.3:1 — PASSES */
+color: #3a5e50;    /* ratio: 5.1:1 — PASSES */</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Step-by-Step Instructions</div>
+            <ol class="steps-list">
+              <li>Go to <strong>Edit Code</strong> &rarr; open theme CSS files</li>
+              <li>Search for <code>#696969</code> and replace with <code>#595959</code></li>
+              <li>Search for <code>#45705f</code> and replace with <code>#3a5e50</code></li>
+              <li>Test with <a href="https://webaim.org/resources/contrastchecker/" target="_blank" style="color:var(--accent-light)">WebAIM Contrast Checker</a></li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 8 -->
+    <div class="task-card" data-task="8">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number medium">8</div>
+        <div class="task-info">
+          <div class="task-title">Write Unique Meta Descriptions for All Pages</div>
+          <div class="task-meta">
+            <span class="badge medium">Medium</span>
+            <span class="timeline-badge">~ 2-3 hours</span>
+            <span class="owner-tag">Content / Marketing</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">Most collection pages and the About page have <strong>missing or generic meta descriptions</strong>. Google auto-generates snippets that are often less compelling, resulting in lower click-through rates from search results.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Pages That Need Meta Descriptions</div>
+            <div class="detail-text">
+              <ul>
+                <li><strong>Homepage</strong> — review and optimize existing</li>
+                <li><strong>Each collection</strong> (Women's, Men's, Underwear, Bras, etc.)</li>
+                <li><strong>About Us</strong> page</li>
+                <li><strong>Top 10 best-selling products</strong> (at minimum)</li>
+              </ul>
+            </div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Examples (150-160 characters each)</div>
+            <div class="example-box">Women's Collection:
+"Shop hypoallergenic women's clothing made from 100% organic cotton. Designed for sensitive skin and allergies. Free shipping on orders over $75."
+
+Underwear Collection:
+"Cottonique organic cotton underwear — latex-free, chemical-free, and dermatologist-tested. Relief for eczema, contact dermatitis, and skin allergies."</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Where to Add</div>
+            <ol class="steps-list">
+              <li>For collections: <strong>Shopify Admin</strong> &rarr; Products &rarr; Collections &rarr; select collection &rarr; scroll to <strong>"Search engine listing"</strong> &rarr; Edit</li>
+              <li>For pages: <strong>Shopify Admin</strong> &rarr; Online Store &rarr; Pages &rarr; select page &rarr; scroll to <strong>"Search engine listing"</strong> &rarr; Edit</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 9 -->
+    <div class="task-card" data-task="9">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number medium">9</div>
+        <div class="task-info">
+          <div class="task-title">Add Descriptive Alt Text to All Images</div>
+          <div class="task-meta">
+            <span class="badge medium">Medium</span>
+            <span class="timeline-badge">~ 2-4 hours</span>
+            <span class="owner-tag">Content / Marketing</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">Product and hero images lack descriptive <code>alt</code> text. This hurts <strong>Google Image Search visibility</strong> (a free traffic source) and makes the site inaccessible to screen reader users.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Alt Text Formula</div>
+            <div class="example-box">Pattern:
+"Cottonique [Product Name] - [Key Feature] - [Color/Variant]"
+
+Examples:
+"Cottonique Women's Hypoallergenic Bralette - 100% Organic Cotton - Natural White"
+"Cottonique Men's Crew Neck T-Shirt - Latex-Free Elastic - Melange Grey"
+"Cottonique Organic Cotton Ankle Socks - Seamless Toe - 3-Pack Natural"</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Where to Add</div>
+            <ol class="steps-list">
+              <li><strong>Product images:</strong> Shopify Admin &rarr; Products &rarr; select product &rarr; click on each image &rarr; "Add alt text"</li>
+              <li><strong>Hero/banner images:</strong> Theme Customize &rarr; select the image block &rarr; fill in the "Image alt text" field</li>
+              <li>Start with best-selling products and homepage images first</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASK 10 -->
+    <div class="task-card" data-task="10">
+      <div class="task-header-row" onclick="toggleCard(this)">
+        <div class="checkbox-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" onchange="updateProgress()" />
+          <div class="checkmark"></div>
+        </div>
+        <div class="task-number medium">10</div>
+        <div class="task-info">
+          <div class="task-title">Expand the About Us Page</div>
+          <div class="task-meta">
+            <span class="badge medium">Medium</span>
+            <span class="timeline-badge">~ 3-4 hours</span>
+            <span class="owner-tag">Content / Marketing</span>
+          </div>
+        </div>
+        <div class="expand-icon">&#9660;</div>
+      </div>
+      <div class="task-details">
+        <div class="task-details-inner">
+          <div class="detail-section">
+            <div class="detail-label">What's Wrong</div>
+            <div class="detail-text">The About page has minimal content. For a niche brand serving people with <strong>allergies and sensitive skin</strong>, this is a huge missed opportunity. These customers do extensive research before buying — they want to deeply trust your brand.</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Sections to Add</div>
+            <div class="detail-text">
+              <ul>
+                <li><strong>Founder Story</strong> — Why was Cottonique created? What personal experience drove it?</li>
+                <li><strong>Mission Statement</strong> — "We exist to..." (clear and emotional)</li>
+                <li><strong>Certifications</strong> — Oeko-Tex, GOTS, organic cotton certifications with badge images</li>
+                <li><strong>Manufacturing Process</strong> — How are the garments made? What makes them different?</li>
+                <li><strong>Conditions We Help</strong> — Eczema, contact dermatitis, MCS, latex allergy, etc.</li>
+                <li><strong>Testimonials</strong> — Real customer stories with before/after experiences</li>
+                <li><strong>Press & Medical Endorsements</strong> — Any doctor recommendations or media features</li>
+              </ul>
+            </div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Tips</div>
+            <div class="detail-text">
+              <ul>
+                <li>Use high-quality photos of the team and manufacturing facility</li>
+                <li>Include a video if possible (even a 60-second founder message)</li>
+                <li>Link to certification verification pages</li>
+                <li>Aim for 800-1200 words minimum</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline Summary -->
+    <div class="task-card" style="background: linear-gradient(135deg, var(--surface), var(--surface-2)); border-color: var(--accent);">
+      <div class="task-details" style="max-height: none;">
+        <div class="task-details-inner" style="border: none; padding-top: 24px;">
+          <div class="detail-section">
+            <div class="detail-label" style="font-size: 14px;">Recommended Timeline</div>
+            <div class="detail-text">
+              <ul>
+                <li><strong style="color: var(--urgent);">Week 1 (Urgent):</strong> Tasks 1-3 — Enable cart drawer, add H1 tags, add OG meta tags. ~2 hours total.</li>
+                <li><strong style="color: var(--high);">Week 2 (High):</strong> Tasks 4-6 — Product schema, script cleanup, trust badges. ~5-7 hours total.</li>
+                <li><strong style="color: var(--medium);">Weeks 3-4 (Medium):</strong> Tasks 7-10 — Contrast fixes, meta descriptions, alt text, About page. ~8-12 hours total.</li>
+              </ul>
+              <br/>
+              <strong>Total estimated effort: 15-20 hours across 4 weeks.</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-footer">
+      Cottonique Website Audit &mdash; Essential Layer &mdash; Prepared March 2026<br/>
+      Progress is saved locally in your browser.
+    </div>
+  </div>
+</div>
+
+<script>
+  // Password: cottonique2026
+  // Using a simple hash to avoid plaintext in source
+  const PW_HASH = 'cottonique2026';
+
+  function checkPassword() {
+    const input = document.getElementById('pw-input').value;
+    if (input === PW_HASH) {
+      document.getElementById('password-screen').classList.add('hidden');
+      document.getElementById('dashboard').classList.add('visible');
+      sessionStorage.setItem('cq-auth', '1');
+      loadProgress();
+    } else {
+      document.getElementById('pw-error').textContent = 'Incorrect password. Please try again.';
+      document.getElementById('pw-input').value = '';
+      document.getElementById('pw-input').focus();
+    }
+  }
+
+  // Enter key submits password
+  document.getElementById('pw-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') checkPassword();
+  });
+
+  // Auto-login if already authenticated this session
+  if (sessionStorage.getItem('cq-auth') === '1') {
+    document.getElementById('password-screen').classList.add('hidden');
+    document.getElementById('dashboard').classList.add('visible');
+  }
+
+  // Toggle card expand/collapse
+  function toggleCard(headerRow) {
+    const card = headerRow.closest('.task-card');
+    card.classList.toggle('open');
+  }
+
+  // Update progress bar and stats
+  function updateProgress() {
+    const checkboxes = document.querySelectorAll('.task-card .checkbox-wrap input[type="checkbox"]');
+    let completed = 0;
+    checkboxes.forEach((cb, i) => {
+      const card = cb.closest('.task-card');
+      if (cb.checked) {
+        card.classList.add('completed');
+        completed++;
+      } else {
+        card.classList.remove('completed');
+      }
+    });
+
+    const total = checkboxes.length;
+    const pct = Math.round((completed / total) * 100);
+
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('progress-text').textContent = completed + ' of ' + total + ' completed';
+    document.getElementById('remaining-count').textContent = total - completed;
+
+    // Save to localStorage
+    const state = [];
+    checkboxes.forEach(cb => state.push(cb.checked));
+    localStorage.setItem('cq-audit-progress', JSON.stringify(state));
+  }
+
+  // Load saved progress
+  function loadProgress() {
+    const saved = localStorage.getItem('cq-audit-progress');
+    if (saved) {
+      const state = JSON.parse(saved);
+      const checkboxes = document.querySelectorAll('.task-card .checkbox-wrap input[type="checkbox"]');
+      checkboxes.forEach((cb, i) => {
+        if (state[i]) cb.checked = true;
+      });
+      updateProgress();
+    }
+  }
+
+  // Load on page ready
+  if (document.getElementById('dashboard').classList.contains('visible')) {
+    loadProgress();
+  }
+</script>
+
+</body>
+</html>
