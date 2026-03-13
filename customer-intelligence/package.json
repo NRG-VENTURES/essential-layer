@@ -1,0 +1,20 @@
+{
+  "name": "customer-intelligence",
+  "version": "1.0.0",
+  "description": "Cottonique customer intelligence - JudgeMe reviews → Supabase → Claude Q&A",
+  "scripts": {
+    "setup": "node setup-database.js",
+    "sync": "node sync-reviews.js",
+    "insights": "node build-insights.js",
+    "ask": "node ask-claude.js"
+  },
+  "keywords": [],
+  "author": "Essential Layer Inc.",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@supabase/supabase-js": "^2.99.1",
+    "dotenv": "^17.3.1",
+    "postgres": "^3.4.8"
+  }
+}
