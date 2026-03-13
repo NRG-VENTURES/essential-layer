@@ -4,72 +4,85 @@ const fs = require('fs');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_PAT = process.env.SUPABASE_PAT;
+const PROJECT_REF = SUPABASE_URL.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
 const API_TOKEN = process.env.JUDGEME_API_TOKEN;
 const SHOP_DOMAIN = process.env.JUDGEME_SHOP_DOMAIN;
 const PER_PAGE = 100;
 
-function curlGet(url) {
-  const result = execSync(
-    `curl -s --max-time 30 "${url}"`,
-    { maxBuffer: 50 * 1024 * 1024 }
-  ).toString();
-  return JSON.parse(result);
-}
+// Use Management API for SQL operations (more reliable in restricted environments)
+function runSQL(sql, retries = 3) {
+  const tmpFile = `/tmp/sb-sql-${Date.now()}-${Math.random().toString(36).slice(2)}.json`;
+  fs.writeFileSync(tmpFile, JSON.stringify({ query: sql }));
 
-function supabasePost(table, data, onConflict) {
-  const tmpFile = `/tmp/sb-${Date.now()}-${Math.random().toString(36).slice(2)}.json`;
-  fs.writeFileSync(tmpFile, JSON.stringify(Array.isArray(data) ? data : [data]));
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const result = execSync(
+        `curl -s --max-time 60 -X POST "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query" ` +
+        `-H "Authorization: Bearer ${SUPABASE_PAT}" ` +
+        `-H "Content-Type: application/json" ` +
+        `-d @${tmpFile}`,
+        { maxBuffer: 50 * 1024 * 1024 }
+      ).toString();
 
-  const conflictParam = onConflict ? `?on_conflict=${onConflict}` : '';
-  try {
-    const result = execSync(
-      `curl -s --max-time 60 -X POST "${SUPABASE_URL}/rest/v1/${table}${conflictParam}" ` +
-      `-H "apikey: ${SUPABASE_KEY}" -H "Authorization: Bearer ${SUPABASE_KEY}" ` +
-      `-H "Content-Type: application/json" -H "Prefer: resolution=merge-duplicates,return=representation" ` +
-      `-d @${tmpFile}`,
-      { maxBuffer: 50 * 1024 * 1024 }
-    ).toString();
-    fs.unlinkSync(tmpFile);
-    if (!result.trim()) return { data: null, error: null };
-    const parsed = JSON.parse(result);
-    if (parsed.code && parsed.message) return { data: null, error: parsed };
-    return { data: parsed, error: null };
-  } catch (e) {
-    try { fs.unlinkSync(tmpFile); } catch {}
-    return { data: null, error: { message: e.message } };
+      if (result.includes('DNS cache overflow') || result.includes('Could not resolve')) {
+        if (attempt < retries) { execSync(`sleep ${2 * (attempt + 1)}`); continue; }
+        throw new Error('DNS cache overflow after retries');
+      }
+
+      try { fs.unlinkSync(tmpFile); } catch {}
+      if (!result.trim()) return [];
+      const parsed = JSON.parse(result);
+      if (parsed.message && parsed.message.includes('error')) throw new Error(parsed.message);
+      return parsed;
+    } catch (e) {
+      if (attempt < retries && (e.message.includes('DNS') || e.message.includes('timeout') || e.message.includes('Unexpected token'))) {
+        execSync(`sleep ${2 * (attempt + 1)}`);
+        continue;
+      }
+      try { fs.unlinkSync(tmpFile); } catch {}
+      throw new Error(`SQL error: ${e.message}`);
+    }
   }
 }
 
-function supabaseGet(table, params) {
-  const qs = params ? '?' + Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&') : '';
-  const result = execSync(
-    `curl -s --max-time 30 "${SUPABASE_URL}/rest/v1/${table}${qs}" ` +
-    `-H "apikey: ${SUPABASE_KEY}" -H "Authorization: Bearer ${SUPABASE_KEY}"`,
-    { maxBuffer: 50 * 1024 * 1024 }
-  ).toString();
-  if (!result.trim()) return [];
-  return JSON.parse(result);
+function curlGet(url, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = execSync(
+        `curl -s --max-time 30 "${url}"`,
+        { maxBuffer: 50 * 1024 * 1024 }
+      ).toString();
+      if (result.includes('DNS cache overflow')) {
+        if (attempt < maxRetries) { execSync(`sleep ${3 * (attempt + 1)}`); continue; }
+        throw new Error('DNS cache overflow');
+      }
+      return JSON.parse(result);
+    } catch (e) {
+      if (attempt < maxRetries) { execSync(`sleep ${3 * (attempt + 1)}`); continue; }
+      throw e;
+    }
+  }
 }
 
-function supabaseCount(table) {
-  const result = execSync(
-    `curl -s --max-time 30 -I "${SUPABASE_URL}/rest/v1/${table}?select=id" ` +
-    `-H "apikey: ${SUPABASE_KEY}" -H "Authorization: Bearer ${SUPABASE_KEY}" ` +
-    `-H "Prefer: count=exact" -H "Range: 0-0"`,
-    { maxBuffer: 1024 * 1024 }
-  ).toString();
-  const match = result.match(/content-range:\s*\d*-\d*\/(\d+)/i);
-  return match ? parseInt(match[1]) : 0;
+function esc(val) {
+  if (val === null || val === undefined) return 'NULL';
+  if (typeof val === 'boolean') return val ? 'true' : 'false';
+  if (typeof val === 'number') return String(val);
+  if (Array.isArray(val)) {
+    if (val.length === 0) return "'{}'";
+    return "ARRAY[" + val.map(v => "'" + String(v).replace(/'/g, "''") + "'").join(',') + "]::TEXT[]";
+  }
+  if (typeof val === 'object') return "'" + JSON.stringify(val).replace(/'/g, "''") + "'::JSONB";
+  return "'" + String(val).replace(/'/g, "''").replace(/\\/g, '\\\\') + "'";
 }
 
 function analyzeSentiment(rating, body) {
   const text = (body || '').toLowerCase();
   const negativeWords = ['disappointed', 'uncomfortable', 'too small', 'too big', 'poor', 'returned', 'return', 'bad', 'worst', 'terrible', 'hate', 'itchy', 'irritat', 'rash', 'allergic reaction', 'waste', 'cheaply made', 'fell apart', 'unhappy', 'wrong'];
   const positiveWords = ['love', 'amazing', 'comfortable', 'soft', 'perfect', 'great', 'wonderful', 'excellent', 'best', 'favorite', 'recommend', 'relief', 'lifesaver', 'thank', 'happy', 'pleased', 'fantastic', 'awesome'];
-
   const negCount = negativeWords.filter(w => text.includes(w)).length;
   const posCount = positiveWords.filter(w => text.includes(w)).length;
-
   if (rating >= 4 && negCount === 0) return { sentiment: 'positive', score: Math.min(0.999, 0.7 + (rating - 4) * 0.15 + posCount * 0.02) };
   if (rating <= 2 || negCount > posCount) return { sentiment: 'negative', score: Math.max(0.1, 0.5 - rating * 0.1 + negCount * 0.05) };
   return { sentiment: 'neutral', score: 0.5 };
@@ -109,23 +122,15 @@ function fetchAllReviews() {
       const data = curlGet(url);
       const reviews = data.reviews || [];
       allReviews = allReviews.concat(reviews);
-
       if (reviews.length < PER_PAGE) hasMore = false;
     } catch (e) {
-      console.error(`\n  Error on page ${page}: ${e.message}`);
-      // Retry once
-      try {
-        execSync('sleep 2');
-        const data = curlGet(url);
-        allReviews = allReviews.concat(data.reviews || []);
-      } catch {
-        console.error(`  Retry failed on page ${page}, stopping.`);
-        break;
-      }
+      console.error(`\n  Failed page ${page}, stopping: ${e.message}`);
+      break;
     }
-
     process.stdout.write(`\r  Fetched ${allReviews.length} reviews (page ${page})...`);
     page++;
+    // Delay to avoid DNS cache overflow
+    if (page % 3 === 0) execSync('sleep 1');
   }
 
   console.log(`\n  Total: ${allReviews.length} reviews\n`);
@@ -133,9 +138,8 @@ function fetchAllReviews() {
 }
 
 function upsertCustomers(reviews) {
-  console.log('Building customer profiles...');
+  console.log('Building and inserting customer profiles via SQL...');
 
-  // Group by reviewer
   const customerMap = new Map();
   for (const review of reviews) {
     const reviewer = review.reviewer;
@@ -149,121 +153,118 @@ function upsertCustomers(reviews) {
   console.log(`  Found ${customerMap.size} unique customers\n`);
 
   let processed = 0;
-  const customerIdMap = new Map();
-  const batch = [];
+  const batchSize = 25;
+  const entries = [...customerMap.values()];
 
-  for (const [key, { reviewer, reviews: custReviews }] of customerMap) {
-    const ratings = custReviews.map(r => r.rating);
-    const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
-    const dates = custReviews.map(r => new Date(r.created_at)).sort((a, b) => a - b);
-    const products = [...new Set(custReviews.map(r => r.product_title).filter(Boolean))];
+  for (let i = 0; i < entries.length; i += batchSize) {
+    const batch = entries.slice(i, i + batchSize);
+    const values = batch.map(({ reviewer, reviews: custReviews }) => {
+      const ratings = custReviews.map(r => r.rating);
+      const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+      const dates = custReviews.map(r => new Date(r.created_at)).sort((a, b) => a - b);
+      const products = [...new Set(custReviews.map(r => r.product_title).filter(Boolean))];
 
-    const productPrefs = {};
-    for (const r of custReviews) {
-      if (r.product_title) {
-        if (!productPrefs[r.product_title]) {
-          productPrefs[r.product_title] = { rating: r.rating, count: 1 };
-        } else {
-          productPrefs[r.product_title].count++;
-          productPrefs[r.product_title].rating = Math.round(((productPrefs[r.product_title].rating * (productPrefs[r.product_title].count - 1)) + r.rating) / productPrefs[r.product_title].count * 100) / 100;
+      const productPrefs = {};
+      for (const r of custReviews) {
+        if (r.product_title) {
+          if (!productPrefs[r.product_title]) productPrefs[r.product_title] = { rating: r.rating, count: 1 };
+          else { productPrefs[r.product_title].count++; productPrefs[r.product_title].rating = r.rating; }
         }
       }
-    }
 
-    const sentiments = custReviews.map(r => analyzeSentiment(r.rating, r.body).sentiment);
-    const posCount = sentiments.filter(s => s === 'positive').length;
-    const negCount = sentiments.filter(s => s === 'negative').length;
-    const overallSentiment = posCount > sentiments.length / 2 ? 'Generally positive'
-      : negCount > sentiments.length / 2 ? 'Generally negative' : 'Mixed';
+      const sentiments = custReviews.map(r => analyzeSentiment(r.rating, r.body).sentiment);
+      const posCount = sentiments.filter(s => s === 'positive').length;
+      const negCount = sentiments.filter(s => s === 'negative').length;
+      const overallSentiment = posCount > sentiments.length / 2 ? 'Generally positive'
+        : negCount > sentiments.length / 2 ? 'Generally negative' : 'Mixed';
 
-    batch.push({
-      judgeme_reviewer_id: reviewer.id,
-      shopify_customer_id: reviewer.external_id || null,
-      email: reviewer.email || null,
-      name: reviewer.name || null,
-      phone: reviewer.phone || null,
-      accepts_marketing: reviewer.accepts_marketing || false,
-      tags: reviewer.tags || [],
-      total_reviews: custReviews.length,
-      average_rating: parseFloat(avgRating.toFixed(2)),
-      first_review_date: dates[0]?.toISOString(),
-      last_review_date: dates[dates.length - 1]?.toISOString(),
-      sentiment_summary: overallSentiment,
-      top_products: products.slice(0, 10),
-      product_preferences: productPrefs,
-      updated_at: new Date().toISOString()
+      return `(${esc(reviewer.id)}, ${esc(reviewer.external_id || null)}, ${esc(reviewer.email || null)}, ` +
+        `${esc(reviewer.name || null)}, ${esc(reviewer.phone || null)}, ${esc(reviewer.accepts_marketing || false)}, ` +
+        `${esc(reviewer.tags || [])}, ${esc(custReviews.length)}, ${esc(parseFloat(avgRating.toFixed(2)))}, ` +
+        `${esc(dates[0]?.toISOString())}, ${esc(dates[dates.length - 1]?.toISOString())}, ` +
+        `${esc(overallSentiment)}, ${esc(products.slice(0, 10))}, ${esc(productPrefs)})`;
     });
 
-    // Upsert in batches of 50
-    if (batch.length >= 50) {
-      const { data, error } = supabasePost('customers', batch, 'judgeme_reviewer_id');
-      if (error) {
-        console.error(`\n  Batch error: ${error.message}`);
-      } else if (data) {
-        for (const row of data) {
-          customerIdMap.set(row.judgeme_reviewer_id, row.id);
-        }
-      }
-      processed += batch.length;
-      process.stdout.write(`\r  Processed ${processed} customers...`);
-      batch.length = 0;
-    }
-  }
+    const sql = `INSERT INTO customers (judgeme_reviewer_id, shopify_customer_id, email, name, phone, accepts_marketing, tags, total_reviews, average_rating, first_review_date, last_review_date, sentiment_summary, top_products, product_preferences)
+VALUES ${values.join(',\n')}
+ON CONFLICT (judgeme_reviewer_id) DO UPDATE SET
+  email = EXCLUDED.email, name = EXCLUDED.name, phone = EXCLUDED.phone,
+  total_reviews = EXCLUDED.total_reviews, average_rating = EXCLUDED.average_rating,
+  first_review_date = EXCLUDED.first_review_date, last_review_date = EXCLUDED.last_review_date,
+  sentiment_summary = EXCLUDED.sentiment_summary, top_products = EXCLUDED.top_products,
+  product_preferences = EXCLUDED.product_preferences, updated_at = NOW()
+RETURNING id, judgeme_reviewer_id`;
 
-  // Flush remaining
-  if (batch.length > 0) {
-    const { data, error } = supabasePost('customers', batch, 'judgeme_reviewer_id');
-    if (error) console.error(`\n  Batch error: ${error.message}`);
-    else if (data) {
-      for (const row of data) customerIdMap.set(row.judgeme_reviewer_id, row.id);
+    try {
+      const result = runSQL(sql);
+      processed += batch.length;
+    } catch (e) {
+      console.error(`\n  Batch error at ${i}: ${e.message.substring(0, 100)}`);
+      // Try individual inserts for failed batch
+      for (const entry of batch) {
+        try {
+          const singleValues = [entry].map(({ reviewer, reviews: custReviews }) => {
+            const ratings = custReviews.map(r => r.rating);
+            const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+            const dates = custReviews.map(r => new Date(r.created_at)).sort((a, b) => a - b);
+            const products = [...new Set(custReviews.map(r => r.product_title).filter(Boolean))];
+            const sentiments = custReviews.map(r => analyzeSentiment(r.rating, r.body).sentiment);
+            const posCount = sentiments.filter(s => s === 'positive').length;
+            const negCount = sentiments.filter(s => s === 'negative').length;
+            const overallSentiment = posCount > sentiments.length / 2 ? 'Generally positive' : negCount > sentiments.length / 2 ? 'Generally negative' : 'Mixed';
+            return `(${esc(reviewer.id)}, ${esc(reviewer.external_id || null)}, ${esc(reviewer.email || null)}, ${esc(reviewer.name || null)}, ${esc(reviewer.phone || null)}, ${esc(reviewer.accepts_marketing || false)}, ${esc([])}, ${esc(custReviews.length)}, ${esc(parseFloat(avgRating.toFixed(2)))}, ${esc(dates[0]?.toISOString())}, ${esc(dates[dates.length - 1]?.toISOString())}, ${esc(overallSentiment)}, ${esc(products.slice(0, 10))}, ${esc({})})`;
+          });
+          runSQL(`INSERT INTO customers (judgeme_reviewer_id, shopify_customer_id, email, name, phone, accepts_marketing, tags, total_reviews, average_rating, first_review_date, last_review_date, sentiment_summary, top_products, product_preferences) VALUES ${singleValues[0]} ON CONFLICT (judgeme_reviewer_id) DO NOTHING`);
+          processed++;
+        } catch {}
+      }
     }
-    processed += batch.length;
+    process.stdout.write(`\r  Processed ${processed}/${entries.length} customers...`);
   }
 
   console.log(`\n  Upserted ${processed} customers\n`);
-  return customerIdMap;
+
+  // Get customer ID map
+  console.log('  Fetching customer ID map...');
+  const idMap = new Map();
+  const rows = runSQL('SELECT id, judgeme_reviewer_id FROM customers');
+  for (const row of rows) {
+    idMap.set(row.judgeme_reviewer_id, row.id);
+  }
+  console.log(`  Got ${idMap.size} customer IDs\n`);
+  return idMap;
 }
 
 function upsertReviews(reviews, customerIdMap) {
-  console.log('Inserting reviews...');
+  console.log('Inserting reviews via SQL...');
 
   let inserted = 0;
-  const batchSize = 50;
+  const batchSize = 25;
 
   for (let i = 0; i < reviews.length; i += batchSize) {
     const batch = reviews.slice(i, i + batchSize);
-    const rows = batch.map(review => {
+    const values = batch.map(review => {
       const { sentiment, score } = analyzeSentiment(review.rating, review.body);
       const themes = extractThemes(review.body);
       const customerId = review.reviewer ? customerIdMap.get(review.reviewer.id) : null;
 
-      return {
-        judgeme_review_id: review.id,
-        customer_id: customerId || null,
-        title: review.title,
-        body: review.body,
-        rating: review.rating,
-        product_external_id: review.product_external_id,
-        product_title: review.product_title,
-        product_handle: review.product_handle,
-        source: review.source,
-        verified: review.verified,
-        published: review.published,
-        featured: review.featured,
-        has_pictures: review.has_published_pictures,
-        has_videos: review.has_published_videos,
-        sentiment,
-        sentiment_score: score,
-        key_themes: themes,
-        review_date: review.created_at
-      };
+      return `(${esc(review.id)}, ${esc(customerId)}, ${esc(review.title)}, ${esc(review.body)}, ` +
+        `${esc(review.rating)}, ${esc(review.product_external_id)}, ${esc(review.product_title)}, ` +
+        `${esc(review.product_handle)}, ${esc(review.source)}, ${esc(review.verified)}, ` +
+        `${esc(review.published)}, ${esc(review.featured)}, ${esc(review.has_published_pictures)}, ` +
+        `${esc(review.has_published_videos)}, ${esc(sentiment)}, ${esc(score)}, ` +
+        `${esc(themes)}, ${esc(review.created_at)})`;
     });
 
-    const { error } = supabasePost('reviews', rows, 'judgeme_review_id');
-    if (error) {
-      console.error(`\n  Batch error at ${i}: ${error.message}`);
-    } else {
+    const sql = `INSERT INTO reviews (judgeme_review_id, customer_id, title, body, rating, product_external_id, product_title, product_handle, source, verified, published, featured, has_pictures, has_videos, sentiment, sentiment_score, key_themes, review_date)
+VALUES ${values.join(',\n')}
+ON CONFLICT (judgeme_review_id) DO NOTHING`;
+
+    try {
+      runSQL(sql);
       inserted += batch.length;
+    } catch (e) {
+      console.error(`\n  Batch error at ${i}: ${e.message.substring(0, 100)}`);
     }
     process.stdout.write(`\r  Inserted ${inserted}/${reviews.length} reviews...`);
   }
@@ -274,16 +275,24 @@ function upsertReviews(reviews, customerIdMap) {
 function main() {
   console.log('=== JudgeMe → Supabase Review Sync ===\n');
 
+  // Clear existing data for clean sync
+  console.log('Clearing existing data...');
+  runSQL('DELETE FROM customer_insights');
+  runSQL('DELETE FROM reviews');
+  runSQL('DELETE FROM customers');
+  console.log('  Done\n');
+
   const reviews = fetchAllReviews();
   const customerIdMap = upsertCustomers(reviews);
   upsertReviews(reviews, customerIdMap);
 
-  const customerCount = supabaseCount('customers');
-  const reviewCount = supabaseCount('reviews');
+  // Count
+  const custCount = runSQL('SELECT COUNT(*) as c FROM customers');
+  const revCount = runSQL('SELECT COUNT(*) as c FROM reviews');
 
   console.log('=== Sync Complete ===');
-  console.log(`  Customers in DB: ${customerCount}`);
-  console.log(`  Reviews in DB:   ${reviewCount}`);
+  console.log(`  Customers in DB: ${custCount[0]?.c || 0}`);
+  console.log(`  Reviews in DB:   ${revCount[0]?.c || 0}`);
   console.log('\nNext step: node build-insights.js');
 }
 
